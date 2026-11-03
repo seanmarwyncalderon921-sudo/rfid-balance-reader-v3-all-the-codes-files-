@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="refresh" content="0; url=./kiosk.html" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Padua Kiosk Redirect</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: Arial, sans-serif;
+        background: #f5b000;
+        color: #3a241e;
+      }
+      .box {
+        text-align: center;
+        padding: 24px 32px;
+        border-radius: 18px;
+        background: rgba(255,255,255,0.86);
+        box-shadow: 0 20px 50px rgba(0,0,0,0.12);
+      }
+      a {
+        color: #3a241e;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <h2>Loading kiosk...</h2>
+      <p>If you are not redirected, <a href="./kiosk.html">open the kiosk page</a>.</p>
+    </div>
+    <script>
+      window.location.replace('./kiosk.html');
+    </script>
+  </body>
+</html>

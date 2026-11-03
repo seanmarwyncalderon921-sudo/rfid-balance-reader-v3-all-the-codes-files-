@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Padua Kiosk - Private Balance Reader</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            paduaYellow: '#F5B000',
+            paduaBrown: '#573B32',
+            paduaBrownDark: '#3A241E',
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"Space Mono"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    html.light body { background-color: #F5B000; }
+    html.dark body { background-color: #573B32; }
+    body, input, button, select, textarea {
+      font-family: 'Plus Jakarta Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    }
+    .fade-transition {
+      transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+    }
+    .peso-sign {
+      font-family: 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'Apple Symbols', sans-serif;
+      font-weight: 700;
+      line-height: 1;
+    }
+    #actualBalance,
+    #holderUid,
+    #timerText,
+    #kioskCardInput {
+      font-variant-numeric: tabular-nums slashed-zero;
+      font-feature-settings: "tnum" 1, "zero" 1;
+      letter-spacing: 0.02em;
+    }
+    #kioskCardInput,
+    #holderUid,
+    #actualBalance,
+    #timerText {
+      font-family: 'Segoe UI', 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-300 font-sans antialiased selection:bg-amber-200">
+
+  <!-- THEME SWITCHER -->
+  <div class="fixed top-4 right-4 z-20">
+    <button 
+      onclick="toggleTheme()" 
+      class="w-10 h-10 rounded-full bg-white/95 dark:bg-stone-900/95 shadow-md flex items-center justify-center text-stone-800 dark:text-amber-400 hover:scale-105 active:scale-95 transition cursor-pointer"
+      title="Toggle Light / Dark Background"
+    >
+      <i id="themeIcon" class="ph-bold ph-moon text-lg"></i>
+    </button>
+  </div>
+
+  <!-- CENTER WHITE BOX -->
+  <div class="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-6 relative border border-stone-100 flex flex-col">
+    
+    <!-- HEADER -->
+    <header class="text-center pb-4 border-b border-stone-100">
+      <div class="flex items-center justify-center mb-2">
+        <img 
+          src="logo.jpg" 
+          alt="San Antonio De Padua College" 
+          class="w-14 h-14 object-contain rounded-full shadow-xs border border-stone-100"
+          onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=SAP+College&background=573B32&color=F5B000&size=128';"
+        />
+      </div>
+      <h1 class="font-bold text-sm tracking-wide text-paduaBrown uppercase">
+        San Antonio De Padua
+      </h1>
+      <p class="text-[11px] text-stone-500 font-medium">RFID Balance Checker</p>
+    </header>
+
+    <!-- SCANNER SENSOR TARGET -->
+    <div class="mt-5 space-y-4">
+      <div class="border-2 border-dashed border-stone-300 hover:border-paduaYellow bg-stone-50/70 rounded-2xl p-5 text-center transition">
+        <div class="w-12 h-12 rounded-full bg-paduaYellow/20 text-paduaBrown mx-auto flex items-center justify-center text-xl mb-3">
+          <i class="ph-bold ph-credit-card"></i>
+        </div>
+        <p class="text-xs font-bold text-stone-700 uppercase tracking-wide">Tap your ID Card</p>
+        <p class="text-[11px] text-stone-400 mt-0.5">Balance checker</p>
+        
+        <input 
+          type="text" 
+          id="kioskCardInput" 
+          placeholder="Awaiting RFID tap..." 
+          class="w-full text-center py-2 px-3 mt-3 text-xs font-mono font-bold rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-paduaYellow bg-white text-stone-800 tracking-wider"
+          autocomplete="off"
+        />
+      </div>
+
+      <!-- PRIVATE RESULT DISPLAY (FADES OUT AFTER 5s) -->
+      <div id="statusMessage" class="hidden rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-semibold text-amber-800"></div>
+
+      <div 
+        id="resultCard" 
+        class="hidden fade-transition opacity-0 bg-stone-50 rounded-2xl p-4 border border-stone-200 space-y-3 relative overflow-hidden"
+      >
+        <div id="wipeBar" class="absolute top-0 left-0 h-1 bg-amber-400 transition-all duration-1000 ease-linear w-full"></div>
+
+        <div class="flex justify-between items-start pt-1">
+          <div>
+            <div id="holderName" class="font-bold text-stone-800 text-sm">--</div>
+            <div id="holderUid" class="text-[10px] text-stone-400 font-mono tracking-wider">UID: ••••••••</div>
+          </div>
+          <span class="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full">Active</span>
+        </div>
+
+        <div class="pt-2 border-t border-stone-200/80 flex items-baseline justify-between">
+          <span class="text-xs text-stone-500 font-medium">Your Current Balance</span>
+          <div class="text-2xl font-black text-paduaBrown font-mono">
+            <span class="peso-sign">₱</span><span id="actualBalance">0.00</span>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-[10px] text-stone-400 font-mono pt-1 border-t border-stone-100">
+          <span class="flex items-center gap-1">
+            <i class="ph-bold ph-eye-slash"></i> Private view
+          </span>
+          <span>Fading in <span id="timerText" class="font-bold text-paduaBrown">5</span>s</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- FOOTER -->
+    <div class="text-center pt-5 mt-4 border-t border-stone-100 text-[10px] text-stone-400 font-medium">
+      San Antonio De Padua College • Pila, Laguna
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBGtHCA1a3j6q3tYcLdIQ5yWCkmRHaVSgA",
+      authDomain: "rfid-balance-reader.firebaseapp.com",
+      databaseURL: "https://rfid-balance-reader-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "rfid-balance-reader",
+      storageBucket: "rfid-balance-reader.firebasestorage.app",
+      messagingSenderId: "513826333162",
+      appId: "1:513826333162:web:869524cc8b8b5013211293",
+      measurementId: "G-ZFQ8KPWKTV"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const dbRef = firebase.database().ref('padua_rfid_db');
+    const syncRef = firebase.database().ref('padua_rfid_sync/last_activity');
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playBeep() {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.frequency.setValueAtTime(650, now);
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+      osc.start(now);
+      osc.stop(now + 0.12);
+    }
+
+    let activeUID = null;
+    let wipeTimeout = null;
+    let countdownInterval = null;
+    let timeLeft = 5;
+    let lastScanTime = 0;
+    const SCAN_COOLDOWN_MS = 1800;
+
+    function showStatus(message, type = 'warning') {
+      const status = document.getElementById('statusMessage');
+      status.textContent = message;
+      status.className = 'rounded-xl border px-3 py-2 text-[10px] font-semibold';
+
+      if (type === 'error') {
+        status.classList.add('border-red-200', 'bg-red-50', 'text-red-700');
+      } else if (type === 'success') {
+        status.classList.add('border-emerald-200', 'bg-emerald-50', 'text-emerald-700');
+      } else {
+        status.classList.add('border-amber-200', 'bg-amber-50', 'text-amber-800');
+      }
+
+      status.classList.remove('hidden');
+      clearTimeout(status.hideTimer);
+      status.hideTimer = setTimeout(() => {
+        status.classList.add('hidden');
+      }, 2600);
+    }
+
+    function toggleTheme() {
+      const htmlEl = document.documentElement;
+      const themeIcon = document.getElementById('themeIcon');
+      if (htmlEl.classList.contains('light')) {
+        htmlEl.classList.remove('light');
+        htmlEl.classList.add('dark');
+        themeIcon.className = 'ph-bold ph-sun text-lg';
+      } else {
+        htmlEl.classList.remove('dark');
+        htmlEl.classList.add('light');
+        themeIcon.className = 'ph-bold ph-moon text-lg';
+      }
+    }
+
+    function normalizeUid(value) {
+      return (value || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    }
+
+    function maskName(name) {
+      const raw = (name || '').trim();
+      if (!raw) return 'Student';
+
+      const parts = raw.split(/\s+/).filter(Boolean);
+      if (!parts.length) return 'Student';
+
+      const firstName = parts[0];
+      const visibleFirst = firstName.length > 2 ? firstName.slice(0, 2) : firstName.slice(0, 1);
+
+      if (parts.length === 1) {
+        return `${visibleFirst}***`;
+      }
+
+      const last = parts[parts.length - 1];
+      return `${visibleFirst}*** ${last}`;
+    }
+
+    function maskUid(id) {
+      if (!id || id.length <= 4) return '••••';
+      return id.substring(0, 2) + '••••' + id.substring(id.length - 2);
+    }
+
+    async function syncLastActivity(uid) {
+      const now = Date.now();
+      if (now - lastScanTime < SCAN_COOLDOWN_MS) {
+        return;
+      }
+      lastScanTime = now;
+
+      try {
+        await syncRef.set({
+          uid: normalizeUid(uid),
+          action: 'check_balance',
+          source: 'kiosk',
+          timestamp: now
+        });
+      } catch (error) {
+        console.error('Sync write failed:', error);
+        showStatus('Balance sync is temporarily unavailable.', 'error');
+      }
+    }
+
+    async function detectCard(uid) {
+      uid = normalizeUid(uid);
+      if (!uid) return;
+
+      const now = Date.now();
+      if (now - lastScanTime < SCAN_COOLDOWN_MS) {
+        return;
+      }
+
+      activeUID = uid;
+      const cardRef = firebase.database().ref('padua_rfid_db/' + uid);
+
+      try {
+        const snap = await cardRef.once('value');
+        let card = snap.val();
+
+        if (!card) {
+          card = { uid: uid, name: 'Student Card', balance: 0.00 };
+          await cardRef.set(card);
+        }
+
+        document.getElementById('holderName').textContent = maskName(card.name || 'Student Card');
+        document.getElementById('holderUid').textContent = 'UID: ' + maskUid(card.uid || uid);
+        document.getElementById('actualBalance').textContent = Number(card.balance || 0).toFixed(2);
+
+        await syncLastActivity(uid);
+        playBeep();
+      } catch (error) {
+        console.error('Card lookup failed:', error);
+        showStatus('Unable to load balance right now. Please try again.', 'error');
+        return;
+      }
+
+      const resultCard = document.getElementById('resultCard');
+      resultCard.classList.remove('hidden');
+      
+      setTimeout(() => {
+        resultCard.classList.remove('opacity-0');
+        resultCard.classList.add('opacity-100');
+      }, 20);
+
+      startFiveSecondTimer();
+    }
+
+    function startFiveSecondTimer() {
+      clearInterval(countdownInterval);
+      clearTimeout(wipeTimeout);
+      timeLeft = 5;
+
+      const timerText = document.getElementById('timerText');
+      const wipeBar = document.getElementById('wipeBar');
+      const resultCard = document.getElementById('resultCard');
+
+      timerText.textContent = timeLeft;
+      wipeBar.style.width = '100%';
+
+      countdownInterval = setInterval(() => {
+        timeLeft--;
+        timerText.textContent = timeLeft;
+        wipeBar.style.width = ((timeLeft / 5) * 100) + '%';
+        if (timeLeft <= 0) clearInterval(countdownInterval);
+      }, 1000);
+
+      wipeTimeout = setTimeout(() => {
+        resultCard.classList.remove('opacity-100');
+        resultCard.classList.add('opacity-0');
+
+        setTimeout(() => {
+          resultCard.classList.add('hidden');
+          document.getElementById('holderName').textContent = '--';
+          document.getElementById('actualBalance').textContent = '0.00';
+          document.getElementById('kioskCardInput').value = '';
+          activeUID = null;
+          document.getElementById('kioskCardInput').focus();
+        }, 500);
+
+      }, 4500);
+    }
+
+    const kioskCardInput = document.getElementById('kioskCardInput');
+
+    kioskCardInput.addEventListener('input', () => {
+      kioskCardInput.value = normalizeUid(kioskCardInput.value);
+    });
+
+    kioskCardInput.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+        const value = normalizeUid(e.target.value);
+        e.target.value = '';
+        if (value) {
+          await detectCard(value);
+        }
+      }
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      kioskCardInput.focus();
+      if (!window.firebase) {
+        showStatus('Firebase is not available. Please refresh the page.', 'error');
+      }
+    });
+  </script>
+</body>
+</html>

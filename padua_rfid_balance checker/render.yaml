@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: padua-rfid
+    runtime: static
+    staticPublishPath: ./public
+    buildCommand: ""

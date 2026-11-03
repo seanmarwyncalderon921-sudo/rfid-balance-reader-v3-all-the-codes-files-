@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Padua Cashier - POS & Deduct</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            paduaYellow: '#F5B000',
+            paduaBrown: '#573B32',
+            paduaBrownDark: '#3A241E',
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"Space Mono"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    html.light body { background-color: #F5B000; }
+    html.dark body { background-color: #573B32; }
+    body {
+      font-family: 'Plus Jakarta Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      letter-spacing: 0.01em;
+    }
+    input, select, button, textarea {
+      font-family: 'Plus Jakarta Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    }
+    button {
+      cursor: pointer;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      pointer-events: auto;
+    }
+    .boom-effect { animation: boomPulse 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    @keyframes boomPulse {
+      0% { transform: scale(0.97); }
+      50% { transform: scale(1.03); }
+      100% { transform: scale(1); }
+    }
+    #receiptContent {
+      font-family: 'Segoe UI', 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      letter-spacing: 0.02em;
+      background: #fafaf9;
+      border: 1px solid #e7e5e4;
+      border-radius: 1rem;
+      padding: 0.9rem;
+    }
+    .peso-sign {
+      font-family: 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'Apple Symbols', sans-serif;
+      font-weight: 700;
+      line-height: 1;
+    }
+    #deductDisplay,
+    #addDisplay,
+    #balanceAmount,
+    #actualBalance,
+    #receiptContent,
+    .font-mono,
+    input[type="number"],
+    #customAddInput,
+    #customPrice,
+    #addCardInput,
+    #deductCardInput {
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      font-variant-numeric: tabular-nums lining-nums;
+      font-feature-settings: "tnum" 1, "lnum" 1;
+      letter-spacing: 0;
+    }
+    input[type="number"] {
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-300 font-sans antialiased">
+
+  <!-- TOP CONTROLS -->
+  <div class="fixed top-4 right-4 flex items-center space-x-2 z-20">
+    <button 
+      id="staffMenuBtn"
+      onclick="openStaffMenu()" 
+      class="hidden w-10 h-10 rounded-full bg-white/95 dark:bg-stone-900/95 shadow-md flex items-center justify-center text-stone-800 dark:text-stone-200 hover:scale-105 transition cursor-pointer"
+      title="Staff RFID Menu"
+    >
+      <i class="ph-bold ph-user-rectangle text-lg"></i>
+    </button>
+    <button 
+      onclick="toggleTheme()" 
+      class="w-10 h-10 rounded-full bg-white/95 dark:bg-stone-900/95 shadow-md flex items-center justify-center text-stone-800 dark:text-amber-400 hover:scale-105 transition cursor-pointer"
+      title="Toggle Light / Dark Background"
+    >
+      <i id="themeIcon" class="ph-bold ph-moon text-lg"></i>
+    </button>
+    <button 
+      onclick="lockCashier()" 
+      class="w-10 h-10 rounded-full bg-white/95 dark:bg-stone-900/95 shadow-md flex items-center justify-center text-stone-800 dark:text-stone-200 hover:scale-105 transition cursor-pointer"
+      title="Lock Terminal"
+    >
+      <i class="ph-bold ph-lock-key text-lg"></i>
+    </button>
+  </div>
+
+  <!-- CENTER WHITE BOX -->
+  <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 relative border border-stone-100 flex flex-col">
+
+    <!-- HEADER -->
+    <header class="text-center pb-3 border-b border-stone-100">
+      <div class="flex items-center justify-center mb-2">
+        <img 
+          src="logo.jpg" 
+          alt="San Antonio De Padua College" 
+          class="w-14 h-14 object-contain rounded-full shadow-xs border border-stone-100"
+          onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=SAP+College&background=573B32&color=F5B000&size=128';"
+        />
+      </div>
+      <h1 class="font-bold text-sm tracking-wide text-paduaBrown uppercase">
+        Cashier POS Terminal
+      </h1>
+      <p class="text-[11px] text-stone-500 font-medium">San Antonio De Padua College</p>
+    </header>
+
+    <!-- TAB TOGGLE: DEDUCT VS RELOAD -->
+    <nav class="grid grid-cols-2 gap-1 bg-stone-100 p-1 rounded-xl my-4 text-xs font-semibold">
+      <button 
+        id="tabDeduct" 
+        onclick="switchMode('deduct')" 
+        class="py-2 rounded-lg text-center bg-white text-paduaBrown shadow-xs font-bold cursor-pointer"
+      >
+        Deduct / Canteen
+      </button>
+      <button 
+        id="tabAdd" 
+        onclick="switchMode('add')" 
+        class="py-2 rounded-lg text-center text-stone-600 hover:text-paduaBrown cursor-pointer"
+      >
+        Add Balance
+      </button>
+    </nav>
+
+    <!-- ================= DEDUCT SECTION ================= -->
+    <div id="sectionDeduct" class="space-y-4">
+      <div class="bg-stone-50 rounded-2xl p-3 border border-stone-200">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[10px] uppercase tracking-[0.2em] text-stone-500 font-bold">Menu Catalog</span>
+          <span class="text-[10px] font-bold text-paduaBrown">Select item</span>
+        </div>
+        <div class="relative">
+          <input
+            id="productCatalogInput"
+            list="productCatalogList"
+            value=""
+            class="w-full appearance-none rounded-xl border border-stone-300 bg-white pr-9 pl-3 py-2 text-[11px] font-mono text-stone-800 focus:outline-none focus:ring-2 focus:ring-paduaYellow"
+            placeholder="Input item name"
+            autocomplete="off"
+          />
+          <div class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-stone-500">
+            <i class="ph-bold ph-caret-down text-sm"></i>
+          </div>
+        </div>
+        <datalist id="productCatalogList">
+          <option value="Siomai - ₱5">Siomai - ₱5</option>
+          <option value="Biscuit - ₱5">Biscuit - ₱5</option>
+          <option value="Biscuit - ₱10">Biscuit - ₱10</option>
+          <option value="Biscuit - ₱15">Biscuit - ₱15</option>
+          <option value="Chips - ₱20">Chips - ₱20</option>
+          <option value="Chips - ₱25">Chips - ₱25</option>
+          <option value="Chips - ₱30">Chips - ₱30</option>
+          <option value="Ice cream - ₱15">Ice cream - ₱15</option>
+          <option value="Ice cream - ₱20">Ice cream - ₱20</option>
+          <option value="Ice cream - ₱30">Ice cream - ₱30</option>
+          <option value="Ice cream - ₱50">Ice cream - ₱50</option>
+          <option value="Coffee - ₱50">Coffee - ₱50</option>
+          <option value="Coffee - ₱60">Coffee - ₱60</option>
+          <option value="Meal - ₱50">Meal - ₱50</option>
+          <option value="Meal - ₱60">Meal - ₱60</option>
+          <option value="Meal - ₱70">Meal - ₱70</option>
+          <option value="Bread Rolls - ₱30">Bread Rolls - ₱30</option>
+          <option value="Nissan Cup Noodles - ₱35">Nissan Cup Noodles - ₱35</option>
+        </datalist>
+      </div>
+
+      <div class="bg-stone-50 rounded-2xl p-3 border border-stone-200 text-center">
+        <div class="flex items-center justify-between text-xs text-stone-500 px-1 mb-2 gap-3">
+          <span id="productLabel" class="inline-flex max-w-[58%] items-center rounded-xl border border-blue-200 bg-blue-100 px-3 py-2 text-left text-[13px] font-bold text-blue-800 shadow-sm truncate">Item: None</span>
+          <div class="qty-box ml-auto flex min-w-[150px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-2 py-1.5 shadow-sm">
+            <span class="text-[10px] font-semibold tracking-wide text-stone-600 uppercase">Qty</span>
+            <div class="flex items-center gap-1.5">
+              <button type="button" data-qty-step="-1" data-qty-target="customPrice" class="h-8 w-8 rounded-lg border border-stone-300 bg-stone-100 text-lg font-bold text-stone-700 hover:bg-stone-200 active:scale-95 transition cursor-pointer">−</button>
+              <input 
+                type="number" 
+                id="customPrice" 
+                placeholder="1" 
+                min="1"
+                step="1"
+                class="w-12 sm:w-14 appearance-none border-0 bg-transparent text-center text-[22px] font-bold font-mono text-stone-800 focus:outline-none"
+                oninput="handleCustomPrice(this.value)"
+              />
+              <button type="button" data-qty-step="1" data-qty-target="customPrice" class="h-8 w-8 rounded-lg border border-stone-300 bg-stone-100 text-lg font-bold text-stone-700 hover:bg-stone-200 active:scale-95 transition cursor-pointer">+</button>
+            </div>
+          </div>
+        </div>
+        <div class="text-3xl font-bold text-paduaBrown font-mono">
+          <span class="peso-sign">₱</span><span id="deductDisplay">0.00</span>
+        </div>
+      </div>
+
+      <div id="deductBox" class="border-2 border-paduaYellow bg-amber-50/40 rounded-2xl p-4 text-center transition">
+        <div class="w-10 h-10 rounded-full bg-paduaBrown text-paduaYellow mx-auto flex items-center justify-center text-lg mb-2 shadow-xs">
+          <i class="ph-bold ph-contactless-payment"></i>
+        </div>
+        <input 
+          type="text" 
+          id="deductCardInput" 
+          data-rfid-field="true"
+          placeholder="Tap RFID card to deduct..." 
+          class="w-full text-center py-2 px-3 text-xs font-mono font-bold rounded-xl border border-amber-300 focus:outline-none focus:ring-2 focus:ring-paduaYellow bg-white text-stone-800"
+          autocomplete="off"
+        />
+        <div id="deductFeedback" class="mt-2 text-xs font-medium py-1.5 px-3 rounded-lg hidden"></div>
+      </div>
+    </div>
+
+    <!-- ================= ADD BALANCE SECTION ================= -->
+    <div id="sectionAdd" class="space-y-4 hidden">
+      <div class="bg-stone-50 rounded-2xl p-4 border border-stone-200 text-center">
+        <div class="flex items-center justify-center gap-3 mb-4">
+          <span class="text-[15px] font-medium text-stone-700">Amount to Add</span>
+        </div>
+
+        <div class="mx-auto flex w-full max-w-[320px] items-center justify-center gap-2 rounded-2xl border-2 border-stone-300 bg-white px-4 py-3 shadow-inner">
+          <button type="button" data-qty-step="-1" data-qty-target="customAddInput" class="h-10 w-10 rounded-lg border border-stone-300 bg-stone-100 text-xl font-bold text-stone-700 hover:bg-stone-200 active:scale-95 transition cursor-pointer">−</button>
+          <span class="peso-sign text-2xl font-black text-stone-700">₱</span>
+          <input 
+            type="number" 
+            id="customAddInput" 
+            value="50" 
+            min="1" 
+            class="w-full max-w-[160px] bg-transparent text-center text-[42px] font-black font-mono text-stone-800 outline-none border-0 focus:ring-0"
+            oninput="handleCustomAdd(this.value)"
+          />
+          <button type="button" data-qty-step="1" data-qty-target="customAddInput" class="h-10 w-10 rounded-lg border border-stone-300 bg-stone-100 text-xl font-bold text-stone-700 hover:bg-stone-200 active:scale-95 transition cursor-pointer">+</button>
+        </div>
+
+        <div class="mt-4 text-3xl font-black text-emerald-700 font-mono tracking-tight">
+          +<span class="peso-sign">₱</span><span id="addDisplay">50.00</span>
+        </div>
+      </div>
+
+      <div class="border-2 border-stone-300 hover:border-emerald-500 bg-stone-50/70 rounded-2xl p-4 text-center transition">
+        <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 mx-auto flex items-center justify-center text-lg mb-2">
+          <i class="ph-bold ph-plus-circle"></i>
+        </div>
+        <input 
+          type="text" 
+          id="addCardInput" 
+          data-rfid-field="true"
+          placeholder="Tap RFID card to add funds..." 
+          class="w-full text-center py-2 px-3 text-xs font-mono font-bold rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white text-stone-800"
+          autocomplete="off"
+        />
+        <div id="addFeedback" class="mt-2 text-xs font-medium py-1.5 px-3 rounded-lg hidden"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="staffManagerOverlay" class="hidden fixed inset-0 bg-stone-950/70 backdrop-blur-sm p-4 z-40">
+    <div class="mx-auto max-w-lg w-full bg-white rounded-3xl shadow-2xl border border-stone-200 overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-stone-200 bg-stone-50">
+        <div>
+          <div class="text-[10px] uppercase tracking-[0.2em] text-stone-500 font-bold">Staff Access</div>
+          <div class="text-lg font-black text-paduaBrown">RFID Manager</div>
+        </div>
+        <button onclick="closeStaffMenu()" class="text-[11px] font-semibold text-stone-500 hover:text-paduaBrown cursor-pointer">Back to POS</button>
+      </div>
+
+      <div class="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+        <div class="bg-amber-50 border border-amber-200 rounded-2xl p-3">
+          <div class="text-[10px] uppercase tracking-[0.2em] text-amber-700 font-bold mb-2">Register RFID Card</div>
+          <div class="space-y-2">
+            <input id="registerUid" type="text" data-rfid-field="true" placeholder="Tap or enter RFID UID" class="w-full text-center py-2 px-3 text-xs font-mono font-bold rounded-xl border border-amber-300 bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-paduaYellow" autocomplete="off" />
+            <input id="registerName" type="text" placeholder="Card holder name" class="w-full text-center py-2 px-3 text-xs font-bold rounded-xl border border-stone-300 bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-paduaYellow" autocomplete="off" />
+            <button onclick="registerCard()" class="w-full py-2.5 bg-paduaBrown hover:bg-paduaBrownDark text-paduaYellow font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer">
+              Register Card
+            </button>
+            <div id="registerFeedback" class="hidden text-[11px] font-bold rounded-lg px-2 py-1.5"></div>
+          </div>
+        </div>
+
+        <div class="bg-stone-50 border border-stone-200 rounded-2xl p-3">
+          <div class="text-[10px] uppercase tracking-[0.2em] text-stone-500 font-bold mb-2">Rename RFID Card</div>
+          <div class="space-y-2">
+            <input id="renameUid" type="text" data-rfid-field="true" placeholder="Existing RFID UID" class="w-full text-center py-2 px-3 text-xs font-mono font-bold rounded-xl border border-stone-300 bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-paduaYellow" autocomplete="off" />
+            <input id="renameName" type="text" placeholder="New name" class="w-full text-center py-2 px-3 text-xs font-bold rounded-xl border border-stone-300 bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-paduaYellow" autocomplete="off" />
+            <button onclick="renameCard()" class="w-full py-2.5 bg-stone-800 hover:bg-stone-900 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer">
+              Update Name
+            </button>
+            <div id="renameFeedback" class="hidden text-[11px] font-bold rounded-lg px-2 py-1.5"></div>
+          </div>
+        </div>
+
+        <div class="bg-stone-50 border border-stone-200 rounded-2xl p-3">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-[10px] uppercase tracking-[0.2em] text-stone-500 font-bold">RFID View</div>
+            <span class="text-[10px] font-bold text-emerald-600">● Live Cloud Sync</span>
+          </div>
+          <div class="max-h-44 overflow-y-auto rounded-xl border border-stone-200 bg-white">
+            <table class="w-full text-left text-[11px]">
+              <thead class="bg-stone-100 text-stone-600 uppercase tracking-wide">
+                <tr>
+                  <th class="px-2 py-2 font-bold">Name</th>
+                  <th class="px-2 py-2 font-bold">UID</th>
+                  <th class="px-2 py-2 font-bold text-right">Balance</th>
+                </tr>
+              </thead>
+              <tbody id="rfidTableBody" class="divide-y divide-stone-200"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="bg-red-50 border border-red-200 rounded-2xl p-3">
+          <div class="text-[10px] uppercase tracking-[0.2em] text-red-700 font-bold mb-2">Remove Student</div>
+          <div class="space-y-2">
+            <input id="removeUid" type="text" data-rfid-field="true" placeholder="RFID UID to remove" class="w-full text-center py-2 px-3 text-xs font-mono font-bold rounded-xl border border-red-300 bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-red-400" autocomplete="off" />
+            <button onclick="removeStudent()" class="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer">
+              Remove Student
+            </button>
+            <div id="removeFeedback" class="hidden text-[11px] font-bold rounded-lg px-2 py-1.5"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="receiptModal" class="fixed inset-0 bg-stone-950/75 backdrop-blur-xs flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl border-t-4 border-paduaYellow">
+      <div class="flex items-center justify-between pb-3 border-b border-stone-200 mb-3">
+        <div>
+          <div class="text-[10px] uppercase tracking-[0.2em] text-stone-500 font-bold">Receipt</div>
+          <div class="text-sm font-black text-paduaBrown">Official Transaction</div>
+        </div>
+        <button onclick="closeReceipt()" class="text-[11px] font-semibold text-stone-500 hover:text-paduaBrown cursor-pointer">Close</button>
+      </div>
+      <div id="receiptContent" class="space-y-2 text-[11px] text-stone-700"></div>
+    </div>
+  </div>
+
+  <!-- CASHIER LOGIN MODAL -->
+  <div id="pinModal" class="fixed inset-0 bg-stone-950/75 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-3xl max-w-xs w-full p-6 text-center shadow-2xl border-t-4 border-paduaYellow space-y-4">
+      <div class="w-12 h-12 rounded-full bg-paduaBrown text-paduaYellow mx-auto flex items-center justify-center text-xl shadow-xs">
+        <i class="ph-bold ph-shield-check"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-sm text-paduaBrown uppercase">Cashier Terminal</h3>
+        <p class="text-xs text-stone-500 mt-0.5">Login to access POS</p>
+      </div>
+
+      <form onsubmit="unlockCashier(event)" class="space-y-3">
+        <input 
+          type="email" 
+          id="cashierEmail" 
+          name="cashierEmail"
+          placeholder="sapcrfidbalancereaderforthesis@sapc.edu.ph" 
+          autocapitalize="none"
+          autocomplete="username"
+          spellcheck="false"
+          inputmode="email"
+          class="w-full text-center py-2 px-3 text-sm bg-stone-50 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-paduaYellow"
+        />
+        <input 
+          type="password" 
+          id="cashierPassword" 
+          name="cashierPassword"
+          placeholder="Password" 
+          autocomplete="current-password"
+          spellcheck="false"
+          class="w-full text-center py-2 px-3 text-sm bg-stone-50 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-paduaYellow"
+        />
+        <div id="pinError" class="text-xs text-red-600 font-semibold hidden">Incorrect email or password.</div>
+        <div class="text-[10px] text-stone-500 text-center">Current login: <span class="font-bold text-paduaBrown">sapcrfidbalancereaderforthesis@sapc.edu.ph</span> / <span class="font-bold text-paduaBrown">sapc2027</span></div>
+        <button type="button" id="resetLockoutBtn" class="w-full py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 font-bold text-[10px] uppercase tracking-wider rounded-xl transition cursor-pointer">
+          Reset lockout
+        </button>
+        <button type="submit" class="w-full py-2.5 bg-paduaBrown hover:bg-paduaBrownDark text-paduaYellow font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer">
+          Unlock POS
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBGtHCA1a3j6q3tYcLdIQ5yWCkmRHaVSgA",
+      authDomain: "rfid-balance-reader.firebaseapp.com",
+      databaseURL: "https://rfid-balance-reader-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "rfid-balance-reader",
+      storageBucket: "rfid-balance-reader.firebasestorage.app",
+      messagingSenderId: "513826333162",
+      appId: "1:513826333162:web:869524cc8b8b5013211293",
+      measurementId: "G-ZFQ8KPWKTV"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const dbRef = firebase.database().ref('padua_rfid_db');
+    const cashierSyncRef = firebase.database().ref('padua_rfid_cashier/last_transaction');
+
+    dbRef.once('value').then((snap) => {
+      if (!snap.exists()) {
+        dbRef.set({});
+      }
+    });
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playTone(type) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      if (type === 'boom') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(38, now + 0.32);
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+        osc.start(now);
+        osc.stop(now + 0.32);
+      } else if (type === 'add') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523.25, now);
+        osc.frequency.setValueAtTime(659.25, now + 0.08);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.22);
+        osc.start(now);
+        osc.stop(now + 0.22);
+      } else if (type === 'error') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(130, now);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+      }
+    }
+
+    function normalizeUid(value) {
+      return (value || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    }
+
+    dbRef.on('value', (snapshot) => {
+      const tableBody = document.getElementById('rfidTableBody');
+      const db = snapshot.val() || {};
+      const rows = Object.entries(db)
+        .filter(([key]) => key !== 'last_activity')
+        .map(([, card]) => card)
+        .sort((a, b) => (a.uid || '').localeCompare(b.uid || ''));
+
+      if (!rows.length) {
+        tableBody.innerHTML = '<tr><td colspan="3" class="px-2 py-3 text-center text-stone-400">No RFID cards registered yet.</td></tr>';
+        return;
+      }
+
+      tableBody.innerHTML = rows.map((card) => `
+        <tr class="text-stone-700">
+          <td class="px-2 py-2 font-semibold">${(card.name || 'Unnamed').replace(/</g, '&lt;')}</td>
+          <td class="px-2 py-2 font-mono text-[10px]">${(card.uid || '').replace(/</g, '&lt;')}</td>
+          <td class="px-2 py-2 font-mono text-right font-bold text-paduaBrown">₱${Number(card.balance || 0).toFixed(2)}</td>
+        </tr>
+      `).join('');
+    });
+
+    let staffSessionActive = false;
+
+    function requireStaffAccess(actionName) {
+      if (!staffSessionActive) {
+        showFeedback('registerFeedback', 'Staff access is locked. Unlock the cashier before editing cards.', 'error');
+        showFeedback('renameFeedback', 'Staff access is locked. Unlock the cashier before editing cards.', 'error');
+        showFeedback('removeFeedback', 'Staff access is locked. Unlock the cashier before removing cards.', 'error');
+        playTone('error');
+        return false;
+      }
+      return true;
+    }
+
+    function showFeedback(elementId, message, type) {
+      const feedback = document.getElementById(elementId);
+      feedback.textContent = message;
+      feedback.className = 'text-[11px] font-bold rounded-lg px-2 py-1.5 block ' + (type === 'success' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700');
+    }
+
+    async function pushCashierTransaction(uid, action, amount = 0) {
+      if (!uid) return;
+
+      const payload = {
+        uid: normalizeUid(uid),
+        action,
+        amount: Number(amount || 0),
+        source: 'cashier',
+        timestamp: Date.now()
+      };
+
+      await cashierSyncRef.set(payload);
+    }
+
+    async function registerCard() {
+      if (!requireStaffAccess('register')) return;
+
+      const uid = normalizeUid(document.getElementById('registerUid').value);
+      const name = (document.getElementById('registerName').value || '').trim();
+
+      if (!uid) {
+        showFeedback('registerFeedback', 'Please tap or enter an RFID UID first.', 'error');
+        return;
+      }
+
+      const cardRef = firebase.database().ref('padua_rfid_db/' + uid);
+      const snap = await cardRef.once('value');
+      const existing = snap.val() || {};
+
+      const card = {
+        uid: uid,
+        name: name || existing.name || 'Cardholder (' + uid + ')',
+        balance: existing && existing.balance !== undefined ? Number(existing.balance) : 0.00
+      };
+
+      if (!snap.exists()) {
+        card.balance = 0.00;
+      }
+
+      await cardRef.set(card);
+      document.getElementById('registerName').value = '';
+      document.getElementById('registerUid').value = uid;
+      showFeedback('registerFeedback', `Registered ${card.name} (${uid})`, 'success');
+    }
+
+    async function renameCard() {
+      if (!requireStaffAccess('rename')) return;
+
+      const uid = normalizeUid(document.getElementById('renameUid').value);
+      const name = (document.getElementById('renameName').value || '').trim();
+
+      if (!uid) {
+        showFeedback('renameFeedback', 'Enter the RFID UID to rename.', 'error');
+        return;
+      }
+      if (!name) {
+        showFeedback('renameFeedback', 'Type the new card holder name.', 'error');
+        return;
+      }
+
+      const cardRef = firebase.database().ref('padua_rfid_db/' + uid);
+      const snap = await cardRef.once('value');
+      const card = snap.val() || { uid, balance: 0.00 };
+      card.name = name;
+      card.uid = uid;
+
+      await cardRef.set(card);
+      document.getElementById('renameUid').value = uid;
+      document.getElementById('renameName').value = '';
+      showFeedback('renameFeedback', `Updated ${uid} to ${name}.`, 'success');
+    }
+
+    function openStaffMenu() {
+      if (!staffSessionActive) {
+        lockCashier();
+        return;
+      }
+
+      resetInactivityTimer();
+      const staffOverlay = document.getElementById('staffManagerOverlay');
+      const staffBtn = document.getElementById('staffMenuBtn');
+      const secDeduct = document.getElementById('sectionDeduct');
+      const secAdd = document.getElementById('sectionAdd');
+      const mainCard = document.querySelector('.max-w-md.bg-white.rounded-3xl');
+
+      if (mainCard) mainCard.classList.add('hidden');
+      if (staffOverlay) staffOverlay.classList.remove('hidden');
+      secDeduct.classList.add('hidden');
+      secAdd.classList.add('hidden');
+      staffBtn.classList.add('ring-2', 'ring-paduaYellow');
+    }
+
+    function closeStaffMenu() {
+      const staffOverlay = document.getElementById('staffManagerOverlay');
+      const staffBtn = document.getElementById('staffMenuBtn');
+      const secDeduct = document.getElementById('sectionDeduct');
+      const secAdd = document.getElementById('sectionAdd');
+      const mainCard = document.querySelector('.max-w-md.bg-white.rounded-3xl');
+
+      if (staffOverlay) staffOverlay.classList.add('hidden');
+      if (mainCard) mainCard.classList.remove('hidden');
+      staffBtn.classList.remove('ring-2', 'ring-paduaYellow');
+      if (currentMode === 'deduct') {
+        secDeduct.classList.remove('hidden');
+      } else {
+        secAdd.classList.remove('hidden');
+      }
+      if (staffSessionActive) resetInactivityTimer();
+    }
+
+    let currentMode = 'deduct';
+    let deductPrice = 0.00;
+    let addValue = 50.00;
+    let currentProductName = 'None';
+    let unitPrice = 0.00;
+    let quantity = 1;
+
+    function refreshDeductTotal() {
+      const q = Math.max(1, Math.floor(Number(document.getElementById('customPrice').value || 1)) || 1);
+      quantity = q;
+      deductPrice = unitPrice * quantity;
+      document.getElementById('customPrice').value = String(quantity);
+      const hasItemSelected = !!document.getElementById('productCatalogInput').value.trim();
+      document.getElementById('deductDisplay').textContent = hasItemSelected ? deductPrice.toFixed(2) : '0.00';
+    }
+
+    function parseCatalogValue(rawValue) {
+      const value = (rawValue || '').trim();
+      if (!value) return { name: 'None', price: 0 };
+
+      const cleaned = value
+        .replace(/₱/g, '')
+        .replace(/P\s*/gi, '')
+        .replace(/\s*[-–—]\s*/g, ' - ')
+        .trim();
+
+      const explicitMatch = cleaned.match(/^(.+?)\s*-\s*(\d+(?:\.\d+)?)$/i);
+      if (explicitMatch) {
+        const candidateName = explicitMatch[1].trim();
+        return {
+          name: canonicalizeCatalogName(candidateName),
+          price: Number(explicitMatch[2] || 0)
+        };
+      }
+
+      const catalog = [
+        { aliases: ['siomai'], name: 'Siomai', price: 5 },
+        { aliases: ['biscuit'], name: 'Biscuit', price: 5 },
+        { aliases: ['biscuit 10', 'biscuit - 10', 'biscuit 10.00'], name: 'Biscuit', price: 10 },
+        { aliases: ['biscuit 15', 'biscuit - 15', 'biscuit 15.00'], name: 'Biscuit', price: 15 },
+        { aliases: ['chips'], name: 'Chips', price: 20 },
+        { aliases: ['chips 25', 'chips - 25', 'chips 25.00'], name: 'Chips', price: 25 },
+        { aliases: ['chips 30', 'chips - 30', 'chips 30.00'], name: 'Chips', price: 30 },
+        { aliases: ['ice cream'], name: 'Ice Cream', price: 15 },
+        { aliases: ['ice cream 20', 'ice cream - 20', 'ice cream 20.00'], name: 'Ice Cream', price: 20 },
+        { aliases: ['ice cream 30', 'ice cream - 30', 'ice cream 30.00'], name: 'Ice Cream', price: 30 },
+        { aliases: ['ice cream 50', 'ice cream - 50', 'ice cream 50.00'], name: 'Ice Cream', price: 50 },
+        { aliases: ['coffee'], name: 'Coffee', price: 50 },
+        { aliases: ['coffee 60', 'coffee - 60', 'coffee 60.00'], name: 'Coffee', price: 60 },
+        { aliases: ['meal'], name: 'Meal', price: 50 },
+        { aliases: ['meal 60', 'meal - 60', 'meal 60.00'], name: 'Meal', price: 60 },
+        { aliases: ['meal 70', 'meal - 70', 'meal 70.00'], name: 'Meal', price: 70 },
+        { aliases: ['bread rolls'], name: 'Bread Rolls', price: 30 },
+        { aliases: ['nissan cup noodles', 'nissan cup noodles', 'cup noodles'], name: 'Nissan Cup Noodles', price: 35 }
+      ];
+
+      const fallback = cleaned.toLowerCase();
+      const directMatch = catalog.find(item => item.aliases.some(alias => fallback.includes(alias)));
+      if (directMatch) {
+        const explicitPrice = cleaned.match(/(\d+(?:\.\d+)?)$/);
+        return {
+          name: directMatch.name,
+          price: explicitPrice ? Number(explicitPrice[1]) : directMatch.price
+        };
+      }
+
+      return {
+        name: canonicalizeCatalogName(value.replace(/\s*-\s*\d+(?:\.\d+)?$/, '').trim()) || 'Item',
+        price: 0
+      };
+    }
+
+    function canonicalizeCatalogName(name) {
+      const normalized = (name || '').trim();
+      if (!normalized) return 'Item';
+
+      let fixed = normalized
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      fixed = fixed
+        .replace(/\bCu\s*Noodles\b/gi, 'Cup Noodles')
+        .replace(/\bCup\s*Noodles\b/gi, 'Cup Noodles')
+        .replace(/\bNissan\s*Cu\s*Noodles\b/gi, 'Nissan Cup Noodles')
+        .replace(/\bNissan\s*Cup\s*Noodles\b/gi, 'Nissan Cup Noodles')
+        .replace(/\bIce\s*Cream\b/gi, 'Ice Cream')
+        .replace(/\bBread\s*Rolls\b/gi, 'Bread Rolls')
+        .replace(/\bCoffee\b/gi, 'Coffee')
+        .replace(/\bMeal\b/gi, 'Meal')
+        .replace(/\bChips\b/gi, 'Chips')
+        .replace(/\bBiscuit\b/gi, 'Biscuit')
+        .replace(/\bSiomai\b/gi, 'Siomai');
+
+      return fixed.replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+
+    function applyCatalogSelection() {
+      const field = document.getElementById('productCatalogInput');
+      if (!field) return;
+
+      const rawValue = (field.value || '').trim();
+      const info = parseCatalogValue(rawValue || '');
+      const name = rawValue ? (info.name || 'Item') : 'None';
+      const selectedPrice = rawValue ? Number(info.price ?? 0) : 0;
+
+      currentProductName = rawValue ? name : 'None';
+      unitPrice = !isNaN(selectedPrice) ? selectedPrice : 0;
+      quantity = Math.max(1, Math.floor(Number(document.getElementById('customPrice').value || 1)) || 1);
+      document.getElementById('productLabel').textContent = rawValue ? 'Item: ' + name : 'Item: None';
+      document.getElementById('customPrice').value = String(quantity);
+      deductPrice = unitPrice * quantity;
+      document.getElementById('deductDisplay').textContent = rawValue ? deductPrice.toFixed(2) : '0.00';
+    }
+
+    function resetDeductSelection() {
+      const field = document.getElementById('productCatalogInput');
+      if (field) field.value = '';
+      currentProductName = 'None';
+      unitPrice = 0;
+      quantity = 1;
+      deductPrice = 0;
+      document.getElementById('productLabel').textContent = 'Item: None';
+      document.getElementById('deductDisplay').textContent = '0.00';
+      document.getElementById('customPrice').value = '1';
+    }
+
+    function toggleTheme() {
+      const htmlEl = document.documentElement;
+      const themeIcon = document.getElementById('themeIcon');
+      if (htmlEl.classList.contains('light')) {
+        htmlEl.classList.remove('light');
+        htmlEl.classList.add('dark');
+        themeIcon.className = 'ph-bold ph-sun text-lg';
+      } else {
+        htmlEl.classList.remove('dark');
+        htmlEl.classList.add('light');
+        themeIcon.className = 'ph-bold ph-moon text-lg';
+      }
+    }
+
+    function switchMode(mode) {
+      currentMode = mode;
+      const secDeduct = document.getElementById('sectionDeduct');
+      const secAdd = document.getElementById('sectionAdd');
+      const tabDeduct = document.getElementById('tabDeduct');
+      const tabAdd = document.getElementById('tabAdd');
+
+      if (mode === 'deduct') {
+        secDeduct.classList.remove('hidden');
+        secAdd.classList.add('hidden');
+        tabDeduct.className = 'py-2 rounded-lg text-center bg-white text-paduaBrown shadow-xs font-bold cursor-pointer';
+        tabAdd.className = 'py-2 rounded-lg text-center text-stone-600 hover:text-paduaBrown cursor-pointer';
+        document.getElementById('deductCardInput').focus();
+      } else {
+        secAdd.classList.remove('hidden');
+        secDeduct.classList.add('hidden');
+        tabAdd.className = 'py-2 rounded-lg text-center bg-white text-paduaBrown shadow-xs font-bold cursor-pointer';
+        tabDeduct.className = 'py-2 rounded-lg text-center text-stone-600 hover:text-paduaBrown cursor-pointer';
+        document.getElementById('addCardInput').focus();
+      }
+    }
+
+    function handleCustomPrice(val) {
+      const num = parseFloat(val);
+      if (!isNaN(num) && num > 0) {
+        quantity = Math.max(1, Math.floor(num));
+        deductPrice = unitPrice * quantity;
+        document.getElementById('customPrice').value = String(quantity);
+        const hasItemSelected = !!document.getElementById('productCatalogInput').value.trim();
+        document.getElementById('deductDisplay').textContent = hasItemSelected ? deductPrice.toFixed(2) : '0.00';
+      }
+    }
+
+    function adjustNumericInput(inputId, delta) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+
+      const current = Number.parseInt(input.value || '1', 10);
+      const safeCurrent = Number.isFinite(current) && current > 0 ? current : 1;
+      const nextValue = Math.max(1, safeCurrent + delta);
+      input.value = String(nextValue);
+
+      if (inputId === 'customPrice') {
+        handleCustomPrice(String(nextValue));
+      } else {
+        handleCustomAdd(String(nextValue));
+      }
+    }
+
+    function handleQuantityStep(inputId) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+
+      const applyStep = (direction) => {
+        const current = Number.parseInt(input.value || '1', 10);
+        const safeCurrent = Number.isFinite(current) && current > 0 ? current : 1;
+        const nextValue = direction === 'up' ? safeCurrent + 1 : Math.max(1, safeCurrent - 1);
+
+        input.value = String(nextValue);
+        if (inputId === 'customPrice') {
+          handleCustomPrice(String(nextValue));
+        } else {
+          handleCustomAdd(String(nextValue));
+        }
+      };
+
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          applyStep('up');
+        } else if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          applyStep('down');
+        }
+      });
+
+      input.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        applyStep(event.deltaY < 0 ? 'up' : 'down');
+      }, { passive: false });
+    }
+
+    function applyDetectedUid(uid) {
+      const normalized = normalizeUid(uid);
+      if (!normalized) return;
+
+      const targetFields = [
+        document.getElementById('registerUid'),
+        document.getElementById('renameUid'),
+        document.getElementById('removeUid'),
+        document.getElementById('deductCardInput'),
+        document.getElementById('addCardInput')
+      ];
+
+      const active = document.activeElement;
+      const sameInput = targetFields.find(field => field && field === active);
+
+      if (sameInput) {
+        sameInput.value = normalized;
+        return;
+      }
+
+      targetFields.forEach(field => {
+        if (field) field.value = normalized;
+      });
+    }
+
+    function buildReceipt(type, uid, name, amount, itemName) {
+      const now = new Date();
+      const lines = [
+        'SAN ANTONIO DE PADUA COLLEGE',
+        'Official Receipt',
+        '---------------------',
+        'Date: ' + now.toLocaleString(),
+        'Type: ' + (type === 'deduct' ? 'Canteen Deduction' : 'Balance Added'),
+        'Cardholder: ' + name,
+        'UID: ' + uid,
+        'Item: ' + (itemName || 'N/A'),
+        'Amount: ₱' + Number(amount).toFixed(2),
+        '---------------------',
+        'Thank you!'
+      ];
+
+      document.getElementById('receiptContent').innerHTML = lines.map(line => '<div>' + line + '</div>').join('');
+      document.getElementById('receiptModal').classList.remove('hidden');
+    }
+
+    function closeReceipt() {
+      document.getElementById('receiptModal').classList.add('hidden');
+    }
+
+    async function deductBalance(uid) {
+      uid = normalizeUid(uid);
+      if (!uid) {
+        const feedback = document.getElementById('deductFeedback');
+        feedback.className = 'mt-2 text-xs font-semibold py-1.5 px-3 rounded-lg bg-red-100 text-red-700 block';
+        feedback.textContent = 'RFID card is required before processing the transaction.';
+        return;
+      }
+
+      const selectedItem = (document.getElementById('productCatalogInput').value || '').trim();
+      if (!selectedItem) {
+        const feedback = document.getElementById('deductFeedback');
+        feedback.className = 'mt-2 text-xs font-semibold py-1.5 px-3 rounded-lg bg-red-100 text-red-700 block';
+        feedback.textContent = 'Select an item before processing the deduction.';
+        return;
+      }
+      applyDetectedUid(uid);
+
+      const cardRef = firebase.database().ref('padua_rfid_db/' + uid);
+      const snap = await cardRef.once('value');
+      let card = snap.val() || { uid: uid, name: 'Cardholder (' + uid + ')', balance: 20.00 };
+
+      const feedback = document.getElementById('deductFeedback');
+      const box = document.getElementById('deductBox');
+
+      box.classList.remove('boom-effect');
+      void box.offsetWidth;
+      box.classList.add('boom-effect');
+
+      if (card.balance < deductPrice) {
+        playTone('error');
+        feedback.className = 'mt-2 text-xs font-semibold py-1.5 px-3 rounded-lg bg-red-100 text-red-700 block';
+        feedback.textContent = `Insufficient funds. Available balance: ₱${card.balance.toFixed(2)}. Required: ₱${deductPrice.toFixed(2)}.`;
+        return;
+      }
+
+      card.balance -= deductPrice;
+      card.balance = Math.round(card.balance * 100) / 100;
+      await cardRef.set(card);
+
+      await pushCashierTransaction(uid, 'deduct', deductPrice);
+
+      playTone('boom');
+      feedback.className = 'mt-2 text-xs font-semibold py-1.5 px-3 rounded-lg bg-emerald-100 text-emerald-800 block';
+      feedback.textContent = `Transaction completed. Deducted ₱${deductPrice.toFixed(2)} from ${card.name}. Remaining balance: ₱${card.balance.toFixed(2)}.`;
+      buildReceipt('deduct', uid, card.name, deductPrice, currentProductName || 'Item');
+    }
+
+    function setAddValue(val) {
+      addValue = Number(val) || 0;
+      document.getElementById('addDisplay').textContent = addValue.toFixed(2);
+      document.getElementById('customAddInput').value = addValue;
+      document.getElementById('addCardInput').focus();
+    }
+
+    function handleCustomAdd(val) {
+      const num = parseFloat(val);
+      if (!isNaN(num) && num > 0) {
+        addValue = num;
+        document.getElementById('addDisplay').textContent = num.toFixed(2);
+      }
+    }
+
+    function focusNextRfidField() {
+      if (currentMode === 'deduct') {
+        const field = document.getElementById('deductCardInput');
+        if (field) { field.focus(); field.select(); }
+      } else {
+        const field = document.getElementById('addCardInput');
+        if (field) { field.focus(); field.select(); }
+      }
+    }
+
+    async function addBalance(uid) {
+      uid = normalizeUid(uid);
+      if (!uid) {
+        const feedback = document.getElementById('addFeedback');
+        feedback.className = 'mt-2 text-xs font-semibold py-1.5 px-3 rounded-lg bg-red-100 text-red-700 block';
+        feedback.textContent = 'RFID card is required before adding balance.';
+        return;
+      }
+      applyDetectedUid(uid);
+
+      const cardRef = firebase.database().ref('padua_rfid_db/' + uid);
+      const snap = await cardRef.once('value');
+      let card = snap.val() || { uid: uid, name: 'Cardholder (' + uid + ')', balance: 0.00 };
+
+      card.balance += addValue;
+      card.balance = Math.round(card.balance * 100) / 100;
+      await cardRef.set(card);
+
+      await pushCashierTransaction(uid, 'add', addValue);
+
+      const feedback = document.getElementById('addFeedback');
+      playTone('add');
+      feedback.className = 'mt-2 text-xs font-semibold py-1.5 px-3 rounded-lg bg-emerald-100 text-emerald-800 block';
+      feedback.textContent = `Transaction completed. Added +₱${addValue.toFixed(2)} to ${card.name}. New balance: ₱${card.balance.toFixed(2)}.`;
+      buildReceipt('add', uid, card.name, addValue, 'Balance Top-Up');
+    }
+
+    async function removeStudent() {
+      if (!requireStaffAccess('remove')) return;
+
+      const uid = normalizeUid(document.getElementById('removeUid').value);
+      if (!uid) {
+        showFeedback('removeFeedback', 'Enter an RFID UID to remove.', 'error');
+        return;
+      }
+
+      const cardRef = firebase.database().ref('padua_rfid_db/' + uid);
+      const snap = await cardRef.once('value');
+      if (!snap.exists()) {
+        showFeedback('removeFeedback', 'That RFID is not registered yet.', 'error');
+        return;
+      }
+
+      const studentName = snap.val().name || uid;
+      await cardRef.remove();
+      document.getElementById('removeUid').value = '';
+      showFeedback('removeFeedback', `Removed ${studentName} (${uid}).`, 'success');
+    }
+
+    document.getElementById('deductCardInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        deductBalance(e.target.value);
+        e.target.value = '';
+      }
+    });
+
+    document.getElementById('addCardInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        addBalance(e.target.value);
+        e.target.value = '';
+      }
+    });
+
+    const CASHIER_EMAIL = 'sapcrfidbalancereaderforthesis@sapc.edu.ph';
+    const CASHIER_PASSWORD = 'sapc2027';
+    const LEGACY_CASHIER_EMAIL = 'sapc2027';
+    const LEGACY_CASHIER_PASSWORD = '123456';
+    const PIN_LOCKOUT_KEY = 'padua_cashier_login_lockout';
+    const MAX_PIN_ATTEMPTS = 3;
+    const PIN_LOCKOUT_MS = 30000;
+    const INACTIVITY_TIMEOUT_MS = 90000;
+    let inactivityTimer = null;
+
+    function resetLockoutState() {
+      localStorage.removeItem(PIN_LOCKOUT_KEY);
+      const pinError = document.getElementById('pinError');
+      pinError.classList.add('hidden');
+      pinError.textContent = 'Incorrect email or password.';
+      const emailField = document.getElementById('cashierEmail');
+      const passwordField = document.getElementById('cashierPassword');
+      emailField.value = '';
+      passwordField.value = '';
+      emailField.focus();
+    }
+
+    function resetInactivityTimer() {
+      if (!staffSessionActive) return;
+      clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(() => {
+        lockCashier();
+      }, INACTIVITY_TIMEOUT_MS);
+    }
+
+    function getPinLockoutState() {
+      const raw = localStorage.getItem(PIN_LOCKOUT_KEY);
+      if (!raw) return { attempts: 0, lockUntil: 0 };
+      try {
+        return JSON.parse(raw);
+      } catch (error) {
+        return { attempts: 0, lockUntil: 0 };
+      }
+    }
+
+    function savePinLockoutState(state) {
+      localStorage.setItem(PIN_LOCKOUT_KEY, JSON.stringify(state));
+    }
+
+    function showPinError(message) {
+      const pinError = document.getElementById('pinError');
+      pinError.textContent = message;
+      pinError.classList.remove('hidden');
+    }
+
+    function hidePinError() {
+      document.getElementById('pinError').classList.add('hidden');
+    }
+
+    async function unlockCashier(e) {
+      e.preventDefault();
+      const emailField = document.getElementById('cashierEmail');
+      const passwordField = document.getElementById('cashierPassword');
+      const email = (emailField.value || '').trim().toLowerCase();
+      const password = (passwordField.value || '').trim();
+      const lockout = getPinLockoutState();
+      const now = Date.now();
+
+      if (lockout.lockUntil > now) {
+        const remaining = Math.ceil((lockout.lockUntil - now) / 1000);
+        showPinError(`Too many failed attempts. Try again in ${remaining}s.`);
+        playTone('error');
+        return;
+      }
+
+      if (!email || !password) {
+        showPinError('Enter both email and password.');
+        playTone('error');
+        return;
+      }
+
+      const credentialsMatch =
+        (email === CASHIER_EMAIL && password === CASHIER_PASSWORD) ||
+        (email === LEGACY_CASHIER_EMAIL && password === LEGACY_CASHIER_PASSWORD);
+
+      if (credentialsMatch) {
+        savePinLockoutState({ attempts: 0, lockUntil: 0 });
+        staffSessionActive = true;
+        hidePinError();
+        document.getElementById('pinModal').classList.add('hidden');
+        document.getElementById('staffMenuBtn').classList.remove('hidden');
+        document.getElementById('deductCardInput').focus();
+        emailField.value = '';
+        passwordField.value = '';
+        resetInactivityTimer();
+        return;
+      }
+
+      const nextAttempts = (lockout.attempts || 0) + 1;
+      if (nextAttempts >= MAX_PIN_ATTEMPTS) {
+        const lockUntil = now + PIN_LOCKOUT_MS;
+        savePinLockoutState({ attempts: 0, lockUntil });
+        showPinError(`Too many failed attempts. Locked for ${PIN_LOCKOUT_MS / 1000}s.`);
+      } else {
+        savePinLockoutState({ attempts: nextAttempts, lockUntil: 0 });
+        const remaining = MAX_PIN_ATTEMPTS - nextAttempts;
+        showPinError(`Incorrect email or password. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`);
+      }
+      playTone('error');
+      passwordField.value = '';
+    }
+
+    function lockCashier() {
+      staffSessionActive = false;
+      clearTimeout(inactivityTimer);
+      document.getElementById('pinModal').classList.remove('hidden');
+      document.getElementById('cashierEmail').value = '';
+      document.getElementById('cashierPassword').value = '';
+      document.getElementById('staffMenuBtn').classList.add('hidden');
+      closeStaffMenu();
+      hidePinError();
+      document.getElementById('cashierEmail').focus();
+    }
+
+    document.getElementById('resetLockoutBtn').addEventListener('click', () => {
+      resetLockoutState();
+      playTone('add');
+    });
+
+    function setCashierUnlockedState(isUnlocked) {
+      const pinModal = document.getElementById('pinModal');
+      const staffBtn = document.getElementById('staffMenuBtn');
+      staffSessionActive = isUnlocked;
+      clearTimeout(inactivityTimer);
+      if (isUnlocked) {
+        pinModal.classList.add('hidden');
+        staffBtn.classList.remove('hidden');
+        resetInactivityTimer();
+      } else {
+        pinModal.classList.remove('hidden');
+        staffBtn.classList.add('hidden');
+        hidePinError();
+      }
+    }
+
+    function isRfidField(field) {
+      return !!(field && field.dataset && field.dataset.rfidField === 'true');
+    }
+
+    function isLikelyRfidValue(value) {
+      const digitsOnly = (value || '').replace(/[^A-Z0-9-]/gi, '');
+      if (!digitsOnly) return false;
+      return digitsOnly.length >= 8 && /[0-9]/.test(digitsOnly) && !/\s/.test(value || '');
+    }
+
+    function restrictPasteToRfidFields() {
+      document.querySelectorAll('input, textarea').forEach((field) => {
+        if (isRfidField(field)) return;
+
+        const rejectNonRfidInsertion = (event) => {
+          if (event.type === 'paste' || event.type === 'drop' || event.type === 'contextmenu') {
+            event.preventDefault();
+            return;
+          }
+          if ((event.ctrlKey || event.metaKey) && event.key && event.key.toLowerCase() === 'v') {
+            event.preventDefault();
+            return;
+          }
+        };
+
+        field.addEventListener('paste', rejectNonRfidInsertion);
+        field.addEventListener('drop', rejectNonRfidInsertion);
+        field.addEventListener('contextmenu', rejectNonRfidInsertion);
+        field.addEventListener('keydown', (event) => {
+          if ((event.ctrlKey || event.metaKey) && event.key && event.key.toLowerCase() === 'v') {
+            event.preventDefault();
+          }
+        });
+      });
+    }
+
+    document.addEventListener('contextmenu', (event) => {
+      if (event.target && event.target.closest('input, textarea')) {
+        event.preventDefault();
+      }
+    });
+
+    ['click', 'keydown', 'mousemove', 'touchstart', 'input'].forEach((eventName) => {
+      document.addEventListener(eventName, () => {
+        if (staffSessionActive) {
+          resetInactivityTimer();
+        }
+      }, { passive: true });
+    });
+
+    document.addEventListener('keydown', (event) => {
+      const blockedKeys = ['F12', 'F11', 'PrintScreen'];
+      const devToolsCombo = event.key === 'I' && (event.ctrlKey || event.metaKey) && event.shiftKey;
+      if (blockedKeys.includes(event.key) || devToolsCombo) {
+        event.preventDefault();
+      }
+    });
+
+    const productCatalogInput = document.getElementById('productCatalogInput');
+    productCatalogInput.addEventListener('input', applyCatalogSelection);
+    productCatalogInput.addEventListener('change', applyCatalogSelection);
+    productCatalogInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        applyCatalogSelection();
+        focusNextRfidField();
+      }
+    });
+
+    handleQuantityStep('customPrice');
+    handleQuantityStep('customAddInput');
+
+    document.querySelectorAll('[data-qty-target]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const targetId = button.getAttribute('data-qty-target');
+        const delta = Number(button.getAttribute('data-qty-step') || '0');
+        if (targetId) {
+          adjustNumericInput(targetId, delta);
+        }
+      });
+    });
+
+    restrictPasteToRfidFields();
+
+    document.getElementById('customPrice').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        focusNextRfidField();
+      }
+    });
+
+    document.getElementById('customAddInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        focusNextRfidField();
+      }
+    });
+
+    document.getElementById('registerUid').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') registerCard();
+    });
+
+    document.getElementById('renameUid').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') renameCard();
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      resetDeductSelection();
+      setCashierUnlockedState(false);
+      document.getElementById('cashierEmail').focus();
+    });
+
+    window.addEventListener('blur', () => {
+      if (staffSessionActive) {
+        lockCashier();
+      }
+    });
+
+    window.addEventListener('focus', () => {
+      if (staffSessionActive) {
+        resetInactivityTimer();
+      }
+    });
+  </script>
+</body>
+</html>
